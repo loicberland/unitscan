@@ -1,11 +1,26 @@
 local unitscan = CreateFrame'Frame'
+local nearby_targets = {}
+local found_rares = {}
+local rare_spawns = {}
+local initialized = false
+
 unitscan:SetScript('OnUpdate', function() unitscan.UPDATE() end)
-unitscan:SetScript('OnEvent', function() unitscan.LOAD() end)
+unitscan:SetScript('OnEvent', function()
+	if event == 'VARIABLES_LOADED' then
+		unitscan.LOAD()
+		initialized = true
+		unitscan.refresh_nearby_targets()
+	elseif event == 'PLAYER_ENTERING_WORLD' or event == 'ZONE_CHANGED_NEW_AREA' then
+		unitscan.refresh_nearby_targets()
+	end
+end)
 unitscan:RegisterEvent'VARIABLES_LOADED'
+unitscan:RegisterEvent'PLAYER_ENTERING_WORLD'
+unitscan:RegisterEvent'ZONE_CHANGED_NEW_AREA'
 
 local BROWN = {.7, .15, .05}
 local YELLOW = {1, 1, .15}
-local CHECK_INTERVAL = .1
+local CHECK_INTERVAL = .3
 
 -- unitscan_targets = {}
 
@@ -23,14 +38,43 @@ do
 	end
 end
 
+function unitscan.alert_target()
+	unitscan.play_sound()
+	unitscan.flash.animation:Play()
+	unitscan.button:set_target()
+end
+
+function unitscan.refresh_nearby_targets()
+	local zone = GetRealZoneText()
+	nearby_targets = {}
+	if not zone then return end
+
+	for name, rare_zone in pairs(rare_spawns) do
+		if zone == rare_zone or strfind(zone, rare_zone, 1, true) then
+			tinsert(nearby_targets, name)
+		end
+	end
+
+	sort(nearby_targets, function(name1, name2) return name1 < name2 end)
+end
+
 function unitscan.check_for_targets()
-    -- DEFAULT_CHAT_FRAME:AddMessage("unitscan_targets = "..tostring(unitscan_targets))
-	for name, _ in pairs(unitscan_targets) do
+	for name in pairs(unitscan_targets) do
 		if unitscan.target(name) then
 			unitscan.toggle_target(name)
-			unitscan.play_sound()
-			unitscan.flash.animation:Play()
-			unitscan.button:set_target()
+			found_rares[name] = true
+			unitscan.alert_target()
+		end
+	end
+
+	for _, name in ipairs(nearby_targets) do
+		if unitscan.target(name) then
+			if not found_rares[name] then
+				found_rares[name] = true
+				unitscan.alert_target()
+			end
+		else
+			found_rares[name] = nil
 		end
 	end
 end
@@ -298,6 +342,7 @@ end
 do
 	unitscan.last_check = GetTime()
 	function unitscan.UPDATE()
+		if not initialized then return end
 		if GetTime() - unitscan.last_check >= CHECK_INTERVAL then
 			unitscan.last_check = GetTime()
 			unitscan.check_for_targets()
@@ -333,9 +378,23 @@ end
 	
 SLASH_UNITSCAN1 = '/unitscan'
 function SlashCmdList.UNITSCAN(parameter)
-	local _, _, name = strfind(parameter, '^%s*(.-)%s*$')
+	local _, _, name = strfind(parameter or '', '^%s*(.-)%s*$')
 	
-	if name == '' then
+	if name == 'nearby' then
+		unitscan.print('Rares scannes dans la zone actuelle :')
+		if table.getn(nearby_targets) == 0 then
+			unitscan.print('(aucun rare connu dans cette zone)')
+		else
+			for _, rare_name in ipairs(nearby_targets) do
+				unitscan.print(rare_name)
+			end
+		end
+	elseif name == 'help' then
+		unitscan.print('/unitscan <nom> : ajoute ou retire une cible manuelle')
+		unitscan.print('/unitscan nearby : affiche les rares scannes dans la zone')
+		unitscan.print('/unitscan : affiche les cibles manuelles')
+	elseif name == '' then
+		unitscan.print('Cibles manuelles :')
 		for _, key in ipairs(unitscan.sorted_targets()) do
 			unitscan.print(key)
 		end
@@ -343,3 +402,390 @@ function SlashCmdList.UNITSCAN(parameter)
 		unitscan.toggle_target(name)
 	end
 end
+
+-- Liste frFR des rares de WoW Vanilla, reprise de la version 2.4.3.
+-- Seuls les PNJ des zones disponibles en 1.12 sont inclus.
+-- RARE_SPAWNS_FR_BEGIN
+rare_spawns = {
+	["AZUROUS"] = "Winterspring",
+	["GENERAL COLBATANN"] = "Winterspring",
+	["KASHOCH THE REAVER"] = "Winterspring",
+	["LADY HEDERINE"] = "Winterspring",
+	["ALSHIRR BANEBREATH"] = "Felwood",
+	["DESSECUS"] = "Felwood",
+	["IMMOLATUS"] = "Felwood",
+	["MONNOS THE ELDER"] = "Azshara",
+	["SCALEBEARD"] = "Azshara",
+	["BROTHER RAVENOAK"] = "Stonetalon Mountains",
+	["FOREMAN RIGGER"] = "Stonetalon Mountains",
+	["SISTER RIVEN"] = "Stonetalon Mountains",
+	["SORROW WING"] = "Stonetalon Mountains",
+	["TASKMASTER WHIPFANG"] = "Stonetalon Mountains",
+	["AEAN SWIFTRIVER"] = "The Barrens",
+	["AMBASSADOR BLOODRAGE"] = "The Barrens",
+	["BRONTUS"] = "The Barrens",
+	["CAPTAIN GEROGG HAMMERTOE"] = "The Barrens",
+	["ELDER MYSTIC RAZORSNOUT"] = "The Barrens",
+	["GESHARAHAN"] = "The Barrens",
+	["HAGG TAURENBANE"] = "The Barrens",
+	["HANNAH BLADELEAF"] = "The Barrens",
+	["MARCUS BEL"] = "The Barrens",
+	["ROCKLANCE"] = "The Barrens",
+	["SISTER RATHTALON"] = "The Barrens",
+	["SWIFTMANE"] = "The Barrens",
+	["SWINEGART SPEARHIDE"] = "The Barrens",
+	["TAKK THE LEAPER"] = "The Barrens",
+	["THORA FEATHERMOON"] = "The Barrens",
+	["CAPTAIN FLAT TUSK"] = "Durotar",
+	["FELWEAVER SCORNN"] = "Durotar",
+	["BRIMGORE"] = "Dustwallow Marsh",
+	["SISTER HATELASH"] = "Mulgore",
+	["HEARTRAZOR"] = "Thousand Needles",
+	["IRONEYE THE INVINCIBLE"] = "Thousand Needles",
+	["VILE STING"] = "Thousand Needles",
+	["JIN'ZALLAH THE SANDBRINGER"] = "Tanaris",
+	["WARLEADER KRAZZILAK"] = "Tanaris",
+	["GRUFF"] = "Un'Goro Crater",
+	["KING MOSH"] = "Un'Goro Crater",
+	["REX ASHIL"] = "Silithus",
+	["SCARLET EXECUTIONER"] = "Western Plaguelands",
+	["SCARLET HIGH CLERIST"] = "Western Plaguelands",
+	["TAMRA STORMPIKE"] = "Hillsbrad Foothills",
+	["NARILLASANZ"] = "Alterac Mountains",
+	["GRIMUNGOUS"] = "The Hinterlands",
+	["MITH'RETHIS THE ENCHANTER"] = "The Hinterlands",
+	["DARBEL MONTROSE"] = "Arathi Highlands",
+	["FOULBELLY"] = "Arathi Highlands",
+	["RUUL ONESTONE"] = "Arathi Highlands",
+	["EMOGG THE CRUSHER"] = "Loch Modan",
+	["SIEGE GOLEM"] = "Badlands",
+	["HIGHLORD MASTROGONDE"] = "Searing Gorge",
+	["HEMATOS"] = "Burning Steppes",
+	["LORD CAPTAIN WYRMAK"] = "Swamp of Sorrows",
+	["JADE"] = "Swamp of Sorrows",
+	["HIGH PRIESTESS HAI'WATNA"] = "Stranglethorn Vale",
+	["MOSH'OGG BUTCHER"] = "Stranglethorn Vale",
+	["ANATHEMUS"] = "Badlands",
+	["ZARICOTL"] = "Badlands",
+	["DEVIATE FAERIE DRAGON"] = "Wailing Caverns",
+	["MESHLOK THE HARVESTER"] = "Maraudon",
+	["BLIND HUNTER"] = "Razorfen Kraul",
+	["EARTHCALLER HALMGAR"] = "Razorfen Kraul",
+	["RAZORFEN SPEARHIDE"] = "Razorfen Kraul",
+	["ZERILLIS"] = "Zul'Farrak",
+	["AZSHIR THE SLEEPLESS"] = "Scarlet Monastery",
+	["HEARTHSINGER FORRESTEN"] = "Stratholme",
+	["SKUL"] = "Stratholme",
+	["STONESPINE"] = "Stratholme",
+	["DEATHSWORN CAPTAIN"] = "Shadowfang Keep",
+	["DARK IRON AMBASSADOR"] = "Gnomeregan",
+	["LORD ROCCOR"] = "Blackrock Depths",
+	["PANZOR THE INVINCIBLE"] = "Blackrock Depths",
+	["PYROMANCER LOREGRAIN"] = "Blackrock Depths",
+	["VEREK"] = "Blackrock Depths",
+	["WARDER STILGISS"] = "Blackrock Depths",
+	["BANNOK GRIMAXE"] = "Blackrock Spire",
+	["BURNING FELGUARD"] = "Blackrock Spire",
+	["CRYSTAL FANG"] = "Blackrock Spire",
+	["GHOK BASHGUUD"] = "Blackrock Spire",
+	["SPIRESTONE BATTLE LORD"] = "Blackrock Spire",
+	["SPIRESTONE BUTCHER"] = "Blackrock Spire",
+	["SPIRESTONE LORD MAGUS"] = "Blackrock Spire",
+	["JED RUNEWATCHER"] = "Blackrock Spire",
+	["BRUEGAL IRONKNUCKLE"] = "The Stockade",
+	["MINER JOHNSON"] = "The Deadmines",
+	["SKARR THE UNBREAKABLE"] = "Dire Maul",
+	["MUSHGOG"] = "Dire Maul",
+	["7:XT"] = "Badlands",
+	["ACCURSED SLITHERBLADE"] = "Desolace",
+	["ACHELLIOS THE BANISHED"] = "Thousand Needles",
+	["AKKRILUS"] = "Ashenvale",
+	["AKUBAR THE SEER"] = "Blasted Lands",
+	["ALSHIRR BANEBREATH"] = "Felwood",
+	["ANTILOS"] = "Azshara",
+	["ANTILUS THE SOARER"] = "Feralas",
+	["APOTHECARY FALTHIS"] = "Ashenvale",
+	["ARAGA"] = "Alterac Mountains",
+	["ARASH-ETHIS"] = "Feralas",
+	["AZZERE THE SKYBLADE"] = "The Barrens",
+	["BARNABUS"] = "Badlands",
+	["BAYNE"] = "Tirisfal Glades",
+	["BIG SAMRAS"] = "Hillsbrad Foothills",
+	["BJARN"] = "Dun Morogh",
+	["BLACKMOSS THE FETID"] = "Teldrassil",
+	["BLOODROAR THE STALKER"] = "Feralas",
+	["BOSS GALGOSH"] = "Loch Modan",
+	["BOULDERHEART"] = "Redridge Mountains",
+	["BRACK"] = "Westfall",
+	["MARISA DU'PAIGE"] = "Westfall",
+	["BRANCH SNAPPER"] = "Ashenvale",
+	["BROKEN TOOTH"] = "Badlands",
+	["BROKESPEAR"] = "The Barrens",
+	["BURGLE EYE"] = "Dustwallow Marsh",
+	["CARNIVOUS THE BREAKER"] = "Darkshore",
+	["CHATTER"] = "Redridge Mountains",
+	["CLACK THE REAVER"] = "Blasted Lands",
+	["CLUTCHMOTHER ZAVAS"] = "Un'Goro Crater",
+	["COMMANDER FELSTROM"] = "Duskwood",
+	["CRANKY BENJ"] = "Alterac Mountains",
+	["CREEPTHESS"] = "Hillsbrad Foothills",
+	["CRIMSON ELITE"] = "Western Plaguelands",
+	["CURSED CENTAUR"] = "Desolace",
+	["CYCLOK THE MAD"] = "Tanaris",
+	["DALARAN SPELLSCRIBE"] = "Silverpine Forest",
+	["DARKMIST WIDOW"] = "Dustwallow Marsh",
+	["DART"] = "Dustwallow Marsh",
+	["DEATH FLAYER"] = "Durotar",
+	["DEATH HOWL"] = "Felwood",
+	["DEATHEYE"] = "Blasted Lands",
+	["DEATHMAW"] = "Burning Steppes",
+	["DEATHSPEAKER SELENDRE"] = "Eastern Plaguelands",
+	["DEEB"] = "Tirisfal Glades",
+	["DIAMOND HEAD"] = "Feralas",
+	["DIGGER FLAMEFORGE"] = "The Barrens",
+	["DISHU"] = "The Barrens",
+	["DRAGONMAW BATTLEMASTER"] = "Wetlands",
+	["DREADSCORN"] = "Blasted Lands",
+	["DROGOTH THE ROAMER"] = "Dustwallow Marsh",
+	["DUGGAN WILDHAMMER"] = "Eastern Plaguelands",
+	["DUSKSTALKER"] = "Teldrassil",
+	["DUSTWRAITH"] = "Zul'Farrak",
+	["ECK'ALOM"] = "Ashenvale",
+	["EDAN THE HOWLER"] = "Dun Morogh",
+	["ENFORCER EMILGUND"] = "Mulgore",
+	["ENGINEER WHIRLEYGIG"] = "The Barrens",
+	["FALLEN CHAMPION"] = "Scarlet Monastery",
+	["FARMER SOLLIDEN"] = "Tirisfal Glades",
+	["FAULTY WAR GOLEM"] = "Searing Gorge",
+	["FEDFENNEL"] = "Elwynn Forest",
+	["FELLICENT'S SHADE"] = "Tirisfal Glades",
+	["FENROS"] = "Duskwood",
+	["FINGAT"] = "Swamp of Sorrows",
+	["FIRECALLER RADISON"] = "Darkshore",
+	["FLAGGLEMURK THE CRUEL"] = "Darkshore",
+	["FOE REAPER 4000"] = "Westfall",
+	["FOREMAN GRILLS"] = "The Barrens",
+	["FOREMAN JERRIS"] = "Western Plaguelands",
+	["FOREMAN MARCRID"] = "Western Plaguelands",
+	["FOULMANE"] = "Western Plaguelands",
+	["FURY SHELDA"] = "Teldrassil",
+	["GARNEG CHARSKULL"] = "Wetlands",
+	["GATEKEEPER RAGEROAR"] = "Azshara",
+	["GENERAL FANGFERROR"] = "Azshara",
+	["GEOLORD MOTTLE"] = "Durotar",
+	["GEOMANCER FLINTDAGGER"] = "Arathi Highlands",
+	["GEOPRIEST GUKK'ROK"] = "The Barrens",
+	["GHOST HOWL"] = "Mulgore",
+	["GIBBLESNIK"] = "Thousand Needles",
+	["GIBBLEWILT"] = "Dun Morogh",
+	["GIGGLER"] = "Desolace",
+	["GILMORIAN"] = "Swamp of Sorrows",
+	["GISH THE UNMOVING"] = "Eastern Plaguelands",
+	["GLUGGLE"] = "Stranglethorn Vale",
+	["GNARL LEAFBROTHER"] = "Feralas",
+	["GNAWBONE"] = "Wetlands",
+	["GOREFANG"] = "Silverpine Forest",
+	["GORGON'OCH"] = "Burning Steppes",
+	["GRAVIS SLIPKNOT"] = "Alterac Mountains",
+	["GREAT FATHER ARCTIKUS"] = "Dun Morogh",
+	["GREATER FIREBIRD"] = "Tanaris",
+	["GRETHEER"] = "Silithus",
+	["GRIMMAW"] = "Teldrassil",
+	["GRIMTOOTH"] = "Alterac Valley",
+	["GRIZLAK"] = "Loch Modan",
+	["GRIZZLE SNOWPAW"] = "Winterspring",
+	["GRUBTHOR"] = "Silithus",
+	["GRUFF SWIFTBITE"] = "Elwynn Forest",
+	["GRUKLASH"] = "Burning Steppes",
+	["GRUNTER"] = "Blasted Lands",
+	["HAARKA THE RAVENOUS"] = "Tanaris",
+	["HAHK'ZOR"] = "Burning Steppes",
+	["HAMMERSPINE"] = "Dun Morogh",
+	["HARB FOULMOUNTAIN"] = "Thousand Needles",
+	["HAYOC"] = "Dustwallow Marsh",
+	["HED'MUSH THE ROTTING"] = "Eastern Plaguelands",
+	["HEGGIN STONEWHISKER"] = "The Barrens",
+	["HIGH GENERAL ABBENDIS"] = "Eastern Plaguelands",
+	["HISSPERAK"] = "Desolace",
+	["HUMAR THE PRIDELORD"] = "The Barrens",
+	["HURICANIAN"] = "Silithus",
+	["IRONBACK"] = "The Hinterlands",
+	["IRONSPINE"] = "Scarlet Monastery",
+	["JALINDE SUMMERDRAKE"] = "The Hinterlands",
+	["JIMMY THE BLEEDER"] = "Alterac Mountains",
+	["KASKK"] = "Desolace",
+	["KAZON"] = "Redridge Mountains",
+	["KOVORK"] = "Arathi Highlands",
+	["KREGG KEELHAUL"] = "Tanaris",
+	["KRELLACK"] = "Silithus",
+	["KRETHIS SHADOWSPINNER"] = "Silverpine Forest",
+	["KURMOKK"] = "Stranglethorn Vale",
+	["LADY HEDERINE"] = "Winterspring",
+	["LADY MOONGAZER"] = "Darkshore",
+	["LADY SESSPIRA"] = "Azshara",
+	["LADY SZALLAH"] = "Feralas",
+	["LADY VESPIA"] = "Ashenvale",
+	["LADY VESPIRA"] = "Darkshore",
+	["LADY ZEPHRIS"] = "Hillsbrad Foothills",
+	["LAPRESS"] = "Silithus",
+	["LARGE LOCH CROCOLISK"] = "Loch Modan",
+	["LEECH WIDOW"] = "Wetlands",
+	["LEPRITHUS"] = "Westfall",
+	["LICILLIN"] = "Darkshore",
+	["LO'GROSH"] = "Alterac Mountains",
+	["LORD ANGLER"] = "Dustwallow Marsh",
+	["LORD CONDAR"] = "Loch Modan",
+	["LORD DARKSCYTHE"] = "Eastern Plaguelands",
+	["LORD MALATHROM"] = "Duskwood",
+	["LORD MALDAZZAR"] = "Western Plaguelands",
+	["LORD SAKRASIS"] = "Stranglethorn Vale",
+	["LORD SINSLAYER"] = "Darkshore",
+	["LOST ONE CHIEFTAIN"] = "Swamp of Sorrows",
+	["LOST ONE COOK"] = "Swamp of Sorrows",
+	["LOST SOUL"] = "Tirisfal Glades",
+	["LUPOS"] = "Duskwood",
+	["MA'RUK WYRMSCALE"] = "Wetlands",
+	["MAGISTER HAWKHELM"] = "Azshara",
+	["MAGOSH"] = "Loch Modan",
+	["MAGRONOS THE UNYIELDING"] = "Blasted Lands",
+	["MALFUNCTIONING REAVER"] = "Burning Steppes",
+	["MALGIN BARLEYBREW"] = "The Barrens",
+	["MASTER DIGGER"] = "Westfall",
+	["MASTER FEARDRED"] = "Azshara",
+	["MAZZRANACHE"] = "Mulgore",
+	["MEZZIR THE HOWLER"] = "Winterspring",
+	["MIRELOW"] = "Wetlands",
+	["MIST HOWLER"] = "Ashenvale",
+	["MOJO THE TWISTED"] = "Blasted Lands",
+	["MOLOK THE CRUSHER"] = "Arathi Highlands",
+	["MOLT THORN"] = "Swamp of Sorrows",
+	["MONGRESS"] = "Felwood",
+	["MORGAINE THE SLY"] = "Elwynn Forest",
+	["MOTHER FANG"] = "Elwynn Forest",
+	["MUAD"] = "Tirisfal Glades",
+	["MUGGLEFIN"] = "Ashenvale",
+	["MURDEROUS BLISTERPAW"] = "Tanaris",
+	["NAL'TASZAR"] = "Stonetalon Mountains",
+	["NARAXIS"] = "Duskwood",
+	["NARG THE TASKMASTER"] = "Elwynn Forest",
+	["NEFARU"] = "Duskwood",
+	["NIMAR THE SLAYER"] = "Arathi Highlands",
+	["OAKPAW"] = "Ashenvale",
+	["OLD CLIFF JUMPER"] = "The Hinterlands",
+	["OLD GRIZZLEGUT"] = "Feralas",
+	["OLD VICEJAW"] = "Silverpine Forest",
+	["OLM THE WISE"] = "Felwood",
+	["OMGORN THE LOST"] = "Tanaris",
+	["OOZEWORM"] = "Dustwallow Marsh",
+	["PRIDEWING PATRIARCH"] = "Stonetalon Mountains",
+	["PRINCE KELLEN"] = "Desolace",
+	["PRINCE NAZJAK"] = "Arathi Highlands",
+    ["PRINCE RAZE"] = "Ashenvale",
+    ["PUTRIDIUS"] = "Western Plaguelands",
+    ["QIROT"] = "Feralas",
+    ["RAGEPAW"] = "Felwood",
+    ["RAK'SHIRI"] = "Winterspring",
+    ["RANGER LORD HAWKSPEAR"] = "Eastern Plaguelands",
+    ["RATHORIAN"] = "The Barrens",
+    ["RAVAGE"] = "Blasted Lands",
+    ["RAVASAUR MATRIARCH"] = "Un'Goro Crater",
+    ["RAVENCLAW REGENT"] = "Silverpine Forest",
+    ["RAZORMAW MATRIARCH"] = "Wetlands",
+    ["RAZORTALON"] = "The Hinterlands",
+    ["REKK'TILAC"] = "Searing Gorge",
+    ["RESSAN THE NEEDLER"] = "Tirisfal Glades",
+    ["RETHEROKK THE BERSERKER"] = "The Hinterlands",
+    ["RIBCHASER"] = "Redridge Mountains",
+    ["RIPPA"] = "Stranglethorn Vale",
+    ["RIPSCALE"] = "Dustwallow Marsh",
+    ["RO'BARK"] = "Hillsbrad Foothills",
+    ["ROHH THE SILENT"] = "Redridge Mountains",
+    ["ROLOCH"] = "Stranglethorn Vale",
+    ["RORGISH JOWL"] = "Ashenvale",
+    ["ROT HIDE BRUISER"] = "Silverpine Forest",
+    ["RUMBLER"] = "Badlands",
+    ["SANDARR DUNEREAVER"] = "Zul'farrak",
+    ["SCALD"] = "Searing Gorge",
+    ["SCALE BELLY"] = "Stranglethorn Vale",
+    ["SCARGIL"] = "Hillsbrad Foothills",
+    ["SCARLET INTERROGATOR"] = "Western Plaguelands",
+    ["SCARLET JUDGE"] = "Western Plaguelands",
+    ["SCARLET SMITH"] = "Western Plaguelands",
+    ["SEEKER AQUALON"] = "Redridge Mountains",
+    ["SENTINEL AMARASSAN"] = "Stonetalon Mountains",
+    ["SERGEANT BRASHCLAW"] = "Westfall",
+    ["SETIS"] = "Silithus",
+    ["SEWER BEAST"] = "Stormwind City",
+    ["SHADOWCLAW"] = "Darkshore",
+    ["SHADOWFORGE COMMANDER"] = "Badlands",
+    ["SHANDA THE SPINNER"] = "Loch Modan",
+    ["SHLEIPNARR"] = "Searing Gorge",
+    ["SILITHID HARVESTER"] = "The Barrens",
+    ["SILITHID RAVAGER"] = "Thousand Needles",
+    ["SINGER"] = "Arathi Highlands",
+    ["SKHOWL"] = "Alterac Mountains",
+    ["SLARK"] = "Westfall",
+    -- ["SLAVE MASTER BLACKHEART"] = "Searing Gorge", -- underground mob, may wanna disable
+    ["SLUDGE BEAST"] = "The Barrens",
+    ["SLUDGINN"] = "Wetlands",
+    ["SMOLDAR"] = "Searing Gorge",
+    ["SNAGGLESPEAR"] = "Mulgore",
+    ["SNARLER"] = "Feralas",
+    ["SNARLFLARE"] = "Redridge Mountains",
+    ["SNARLMANE"] = "Silverpine Forest",
+    ["SNORT THE HECKLER"] = "The Barrens",
+    ["SORIID THE DEVOURER"] = "Tanaris",
+    ["SPITEFLAYER"] = "Blasted Lands",
+    ["SQUIDDIC"] = "Redridge Mountains",
+    ["SRI'SKULK"] = "Tirisfal Glades",
+    ["STONE FURY"] = "Alterac Mountains",
+    ["STONEARM"] = "The Barrens",
+    ["STRIDER CLUTCHMOTHER"] = "Darkshore",
+    ["TERRORSPARK"] = "Burning Steppes",
+    ["TERROWULF PACKLORD"] = "Ashenvale",
+    ["THAURIS BALGARR"] = "Burning Steppes",
+    -- ["THE CLEANER"] = "Eastern Plaguelands", -- doesnt drop anything and too much hp.
+    ["THE EVALCHARR"] = "Azshara",
+    ["THE HUSK"] = "Western Plaguelands",
+    ["THE ONGAR"] = "Felwood",
+    ["THE RAKE"] = "Mulgore",
+    ["THE RAZZA"] = "Dire Maul",
+    ["THE REAK"] = "The Hinterlands",
+    ["THE ROT"] = "Dustwallow Marsh",
+    ["THREGGIL"] = "Teldrassil",
+    ["THUNDERSTOMP"] = "The Barrens",
+    ["THUROS LIGHTFINGERS"] = "Elwynn Forest",
+    ["TIMBER"] = "Dun Morogh",
+    ["TORMENTED SPIRIT"] = "Tirisfal Glades",
+    ["TWILIGHT LORD EVERUN"] = "Silithus",
+    ["UHK'LOC"] = "Un'Goro Crater",
+    ["URSOL'LOK"] = "Ashenvale",
+    ["URUSON"] = "Teldrassil",
+    ["VARO'THEN'S GHOST"] = "Azshara",
+    ["VENGEFUL ANCIENT"] = "Stonetalon Mountains",
+    ["VERIFONIX"] = "Stranglethorn Vale",
+    ["VOLCHAN"] = "Burning Steppes",
+    ["VULTROS"] = "Westfall",
+    ["WAR GOLEM"] = "Badlands",
+    ["WARLORD KOLKANIS"] = "Durotar",
+    ["WARLORD THRESH'JIN"] = "Eastern Plaguelands",
+    ["WATCH COMMANDER ZALAPHIL"] = "Durotar",
+    ["WITHERHEART THE STALKER"] = "The Hinterlands",
+    ["ZALAS WITHERBARK"] = "Arathi Highlands",
+    ["ZORA"] = "Silithus",
+    ["ZUL'BRIN WARPBRANCH"] = "Eastern Plaguelands",
+    ["ZUL'AREK HATEFOWLER"] = "The Hinterlands",
+    -- Thanks to Macumba for finding these rares
+    -- ["NERUBIAN OVERSEER"] = "Eastern Plaguelands", -- doesnt drop anything worth and too much hp.
+	["DIGMASTER SHOVELPHLANGE"] = "Badlands",
+	-- ["SCARSHIELD QUARTERMASTER"] = "Blackrock Mountain", -- doesnt drop anything worth
+	["THE BEHEMOTH"] = "Blackrock Mountain",
+	["TREGLA"] = "Eversong Woods",
+	["BRAINWASHED NOBLE"] = "The Deadmines",
+	["TRIGORE THE LASHER"] = "Wailing Caverns",
+	["BOAHN"] = "Wailing Caverns",
+	["CRUSTY"] = "Desolace",
+	["ZEKKIS"] = "Temple of Atal'Hakkar",
+	["VEYZHAK THE CANNIBAL"] = "Temple of Atal'Hakkar",
+}
+-- RARE_SPAWNS_FR_END
