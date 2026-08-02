@@ -3,6 +3,7 @@ local nearby_targets = {}
 local found_rares = {}
 local rare_spawns = {}
 local initialized = false
+local looting = false
 
 unitscan:SetScript('OnUpdate', function() unitscan.UPDATE() end)
 unitscan:SetScript('OnEvent', function()
@@ -12,11 +13,17 @@ unitscan:SetScript('OnEvent', function()
 		unitscan.refresh_nearby_targets()
 	elseif event == 'PLAYER_ENTERING_WORLD' or event == 'ZONE_CHANGED_NEW_AREA' then
 		unitscan.refresh_nearby_targets()
+	elseif event == 'LOOT_OPENED' then
+		looting = true
+	elseif event == 'LOOT_CLOSED' then
+		looting = false
 	end
 end)
 unitscan:RegisterEvent'VARIABLES_LOADED'
 unitscan:RegisterEvent'PLAYER_ENTERING_WORLD'
 unitscan:RegisterEvent'ZONE_CHANGED_NEW_AREA'
+unitscan:RegisterEvent'LOOT_OPENED'
+unitscan:RegisterEvent'LOOT_CLOSED'
 
 local BROWN = {.7, .15, .05}
 local YELLOW = {1, 1, .15}
@@ -38,10 +45,10 @@ do
 	end
 end
 
-function unitscan.alert_target()
+function unitscan.alert_target(target_name)
 	unitscan.play_sound()
 	unitscan.flash.animation:Play()
-	unitscan.button:set_target()
+	unitscan.button:set_target(target_name)
 end
 
 function unitscan.refresh_nearby_targets()
@@ -60,18 +67,17 @@ end
 
 function unitscan.check_for_targets()
 	for name in pairs(unitscan_targets) do
-		if unitscan.target(name) then
+		if unitscan.target(name, unitscan.alert_target) then
 			unitscan.toggle_target(name)
 			found_rares[name] = true
-			unitscan.alert_target()
 		end
 	end
 
 	for _, name in ipairs(nearby_targets) do
-		if unitscan.target(name) then
+		local is_new_target = not found_rares[name]
+		if unitscan.target(name, is_new_target and unitscan.alert_target) then
 			if not found_rares[name] then
 				found_rares[name] = true
-				unitscan.alert_target()
 			end
 		else
 			found_rares[name] = nil
@@ -82,13 +88,29 @@ end
 do
 	local pass = function() end
 
-	function unitscan.target(name)
+	function unitscan.target(name, on_found)
+		local had_target = UnitExists'target'
+		local original_target = UnitName'target'
 		local orig = UIErrorsFrame_OnEvent
 		UIErrorsFrame_OnEvent = pass
 		TargetByName(name, true)
 		UIErrorsFrame_OnEvent = orig
 		local target = UnitName'target'
-		return target and strupper(target) == name
+		local found = target and strupper(target) == name
+
+		-- TargetByName is needed to scan in Vanilla, but must not steal the
+		-- player's target.  Build the alert while the rare is selected, then
+		-- restore the previous target (or leave no target if there was none).
+		if found and on_found then
+			on_found(target)
+		end
+		if had_target and target ~= original_target then
+			TargetLastTarget()
+		elseif not had_target then
+			ClearTarget()
+		end
+
+		return found
 	end
 end
 
@@ -178,8 +200,8 @@ function unitscan.LOAD()
 	button:SetScript('OnClick', function()
 		TargetByName(this:GetText(), true)
 	end)
-	function button:set_target()
-		self:SetText(UnitName'target')
+	function button:set_target(target_name)
+		self:SetText(target_name or UnitName'target')
 
 		self.model:reset()
 		self.model:SetUnit'target'
@@ -342,7 +364,7 @@ end
 do
 	unitscan.last_check = GetTime()
 	function unitscan.UPDATE()
-		if not initialized then return end
+		if not initialized or looting then return end
 		if GetTime() - unitscan.last_check >= CHECK_INTERVAL then
 			unitscan.last_check = GetTime()
 			unitscan.check_for_targets()
