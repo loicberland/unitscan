@@ -1,6 +1,11 @@
 local unitscan = CreateFrame'Frame'
 local nearby_targets = {}
 local found_rares = {}
+local zone_frame = CreateFrame("Frame")
+zone_frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+zone_frame:SetScript("OnEvent", function()
+    found_rares = {}
+end)
 local rare_spawns = {}
 local initialized = false
 local looting = false
@@ -17,6 +22,8 @@ unitscan:SetScript('OnEvent', function()
 		looting = true
 	elseif event == 'LOOT_CLOSED' then
 		looting = false
+		-- Laisse passer un cycle avant de reprendre les scans apres le loot.
+		unitscan.last_check = GetTime()
 	end
 end)
 unitscan:RegisterEvent'VARIABLES_LOADED'
@@ -73,14 +80,21 @@ function unitscan.check_for_targets()
 		end
 	end
 
+	-- Le scan automatique repose sur TargetByName(), qui change reellement
+	-- la cible sous Vanilla. Ne pas l'utiliser en combat : un changement de
+	-- cible, meme restaure aussitot, peut interrompre l'attaque automatique.
+	if UnitAffectingCombat('player') then
+		return
+	end
+
 	for _, name in ipairs(nearby_targets) do
-		local is_new_target = not found_rares[name]
-		if unitscan.target(name, is_new_target and unitscan.alert_target) then
-			if not found_rares[name] then
+		if not found_rares[name] then
+			-- Declenche l'alerte pendant que le rare est encore cible. Cela
+			-- permet aussi au modele 3D de recuperer la bonne unite avant que
+			-- unitscan.target() restaure la cible precedente.
+			if unitscan.target(name, unitscan.alert_target) then
 				found_rares[name] = true
 			end
-		else
-			found_rares[name] = nil
 		end
 	end
 end
@@ -201,7 +215,9 @@ function unitscan.LOAD()
 		TargetByName(this:GetText(), true)
 	end)
 	function button:set_target(target_name)
-		self:SetText(target_name or UnitName'target')
+		local name = target_name or UnitName'target'
+		if not name then return end
+		self:SetText(name)
 
 		self.model:reset()
 		self.model:SetUnit'target'
@@ -364,7 +380,7 @@ end
 do
 	unitscan.last_check = GetTime()
 	function unitscan.UPDATE()
-		if not initialized or looting then return end
+		if not initialized or looting or (LootFrame and LootFrame:IsShown()) then return end
 		if GetTime() - unitscan.last_check >= CHECK_INTERVAL then
 			unitscan.last_check = GetTime()
 			unitscan.check_for_targets()
