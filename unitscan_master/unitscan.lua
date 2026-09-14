@@ -1085,7 +1085,7 @@ elseif currentLocale == "frFR" then
 	["SOUFRESANG"] = "Marécage d'Âprefange",
 	["SŒUR CINGLEHAINE"] = "Mulgore",
 	["TRANCHECOEUR"] = "Mille pointes",
-	["FERREGARD L’INVINCIBLE"] = "Mille pointes",
+	["FERREGARD L'INVINCIBLE"] = "Mille pointes",
 	["DARDEUR"] = "Mille pointes",
 	["JIN'ZALLAH PORTE-SABLE"] = "Tanaris",
 	["CHEF DE GUERRE KRAZZILAK"] = "Tanaris",
