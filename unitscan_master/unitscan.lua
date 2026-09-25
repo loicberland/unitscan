@@ -1084,7 +1084,7 @@ elseif currentLocale == "frFR" then
 	["GANGRETISSEUR ARROGG"] = "Durotar",
 	["SOUFRESANG"] = "Marécage d'Âprefange",
 	["SŒUR CINGLEHAINE"] = "Mulgore",
-	["TRANCHECOEUR"] = "Mille pointes",
+	["TRANCHECŒUR"] = "Mille pointes",
 	["FERREGARD L'INVINCIBLE"] = "Mille pointes",
 	["DARDEUR"] = "Mille pointes",
 	["JIN'ZALLAH PORTE-SABLE"] = "Tanaris",
